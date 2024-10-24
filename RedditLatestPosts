@@ -1,0 +1,293 @@
+// ==UserScript==
+// @name         Display latest posts, comments and replies on Reddit
+// @namespace    http://tampermonkey.net/
+// @version      2024-10-03
+// @description  try to take over the world!
+// @author       UpNDownCan
+// @match        https://www.reddit.com/r/*/
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=reddit.com
+// @grant        none
+// @require      https://not-an-aardvark.github.io/snoowrap/snoowrap-v1.js
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    window.addEventListener("load",
+        function(event) {
+            console.log("Loaded");
+            setTimeout(showUpdateButton, 2000);
+        }
+    );
+
+    function showUpdateButton() {
+        console.log("Running...");
+        var xpathResult = document.evaluate("//reddit-recent-pages", document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+        console.log(xpathResult);
+        var element = xpathResult.iterateNext();
+        //console.log("element is " + element.innerHTML);
+        while (element !== null) {
+            const button = document.createElement("button");
+            button.innerText = "Update";
+            button.addEventListener("click", updateButtonAction);
+            element.appendChild(button);
+            element = /* xpathResult.iterateNext() */ null;
+            if (element !== null) console.log("element is " + element.innerHTML);
+        }
+    }
+
+    function l(string) { console.log(string); }
+
+    const snoowrapCredentials = {
+        userAgent: "SubRedditLatest",
+        clientId: "<your Reddit API Client ID here>",
+        clientSecret: '<your Reddit API client secret here>',
+        username: '<your Reddit username here>',
+        password: '<your Reddit password here>'
+    };
+
+    const myUsername = snoowrapCredentials.username;
+
+    var reddit = null;
+    var subReddit = null;
+    function getReddit() {
+        return new snoowrap(snoowrapCredentials);
+    }
+
+    function updateButtonAction() {
+        console.log("Clicked");
+        if (reddit == null) {
+            reddit = getReddit();
+        }
+
+        subReddit = /^.*\/r\/(.+)\//.exec(window.location)[1];
+        l("location " + window.location);
+        l("subreddit " + subReddit);
+
+        reddit.getTop(subReddit).then(showPosts);
+    }
+
+    const subredditStylingMapping = {
+        "AMD_Stock": "AMD_Stock",
+        "PersonalFinanceCanada": "default"
+    }
+
+    const stylings = {
+        "AMD_Stock": {
+            "oldPosts": "color:black",
+            "newPosts": "color:orange",
+            "oldComments": "color:black",
+            "newComments": "color:orange",
+            "lists": "list-style-type:none; margin:0",
+            "myContent": "color:green",
+            "replyToMe": "color:orange",
+            "tooltips": "<style>" +
+                ".tooltip{position:relative}\n" +
+                ".tooltip:hover:before,.tooltip:hover:after{display:block}\n" +
+                ".tooltip .tooltiptext{visibility:hidden;background-color:#333;color:#fff;text-align:center;border-radius:5px;padding:5px}\n" +
+                ".tooltip .tooltiptext{position:absolute;z-index:1;bottom:120%;left:15%;margin-left:-75px;opacity:0;transition:opacity 0.3s}\n" +
+                ".tooltip:hover .tooltiptext{visibility:visible;opacity:1}" +
+                "</style>"
+        },
+
+        "default": {
+            "oldPosts": "color:black",
+            "newPosts": "color:red",
+            "oldComments": "color:black",
+            "newComments": "color:pink",
+            "lists": "list-style-type:none; margin:0",
+            "myContent": "color:green",
+            "replyToMe": "color:orange",
+            "tooltips": "<style>" +
+                ".tooltip{position:relative}\n" +
+                ".tooltip:hover:before,.tooltip:hover:after{display:block}\n" +
+                ".tooltip .tooltiptext{visibility:hidden;background-color:#333;color:#fff;text-align:center;border-radius:5px;padding:5px}\n" +
+                ".tooltip .tooltiptext{position:absolute;z-index:1;bottom:120%;left:15%;margin-left:-75px;opacity:0;transition:opacity 0.3s}\n" +
+                ".tooltip:hover .tooltiptext{visibility:visible;opacity:1}" +
+                "</style>"
+        }
+    };
+
+    function getStyling() {
+        if (subredditStylingMapping[subReddit] == undefined ||
+            stylings[subredditStylingMapping[subReddit]] == undefined) {
+            return stylings.default;
+        } else {
+            return stylings[subredditStylingMapping[subReddit]];
+        }
+    };
+
+    function getStyle(item) {
+        return " style=\"" + getStyling()[item] + "\"";
+    }
+
+    function timeOf(obj) {
+        return obj.edited ? obj.edited : obj.created_utc;
+    };
+
+    function encodeString(rawStr) {
+        return rawStr.replace(/[\u00A0-\u9999<>\&]/g, i => '&#'+i.charCodeAt(0)+';');
+    }
+
+    var lastPostUpdateTime = 9999999999;
+    function showPosts(posts) {
+        // Fire the requests for comments before formatting the post output
+        posts.sort((a,b) => (a.edited ? a.edited : a.created_utc) - (b.edited ? b.edited : b.created_utc));
+        posts.forEach(post => l("post " + JSON.stringify(post)));
+        l("inserting comments 1");
+        var replyPromises = posts.map(post => post.expandReplies({"limit": 20}));
+        l("inserting comments 2");
+        var postList = posts.slice(0,99).map(post =>
+            "<li>" +
+            "<div class=\"tooltip\">" +
+            "<div class=\"tooltiptext\">" + encodeString(post.selftext ? post.selftext : post.title) + "</div>" +
+            "<span style=\"" + getStyling()[timeOf(post) > lastPostUpdateTime ? "newPosts" : "oldPosts"] + "\">" +
+            displayTime(timeOf(post)) +
+            " <a href=\"" + post.permalink + "\">" +
+                  "<span " + ((post.author.name == myUsername) ? getStyle("myContent") : "") + ">" +
+                  encodeString(post.title) +
+                  "</span>" +
+            "</a>" +
+            "</span>" +
+            "</div>" +
+            "</li>\n");
+        l("inserting comments 3");
+        var postHtml = getStyling().tooltips +
+            "<ul style=\"" + getStyling().lists + "\">" +
+            postList.join(" ") +
+            "</ul><br><hr>";
+        l("inserting comments 4");
+        var insertionPoint = buildPostDiv(postHtml);
+        l("inserting comments 5");
+        Promise.allSettled(replyPromises).then(results => addRepliesAndComments(results, insertionPoint));
+        lastPostUpdateTime = timeOf(posts[posts.length-1]);
+        l("last post update time " + lastPostUpdateTime);
+    }
+
+    var lastCommentUpdateTime = 9999999999;
+    function addRepliesAndComments(postsWithComments, insertionPoint) {
+        l("inserting comments ");
+        //l(JSON.stringify(postsWithComments));
+        l("reply counts");
+        // postsWithComments.forEach(result => console.log(result.value.author.name + ": " + JSON.stringify(result.value.comments.length) + " " + result.value.title));
+        postsWithComments.slice(0,1).forEach(result => console.log(result.value.author.name + ": " + result.value.comments.length + " " + result.value.title));
+        //l(JSON.stringify(postsWithComments.slice(0,1)));
+        var post = postsWithComments[0].value;
+        //l("post " + JSON.stringify(post));
+        //l("post comments " + JSON.stringify(post.comments));
+       // l("post replies " + JSON.stringify(post.comments[0].replies));
+        var comments = postsWithComments.forEach(result => {result.value.comments.forEach(comment=>{comment.replyTo=result.value.author.name;})});
+        comments = postsWithComments.map(result => result.value.comments);
+        //l("comment list " + JSON.stringify(comments));
+        l("unflattened comment list length " + comments.length);
+        comments = comments.flat();
+        l("flattened comment list length " + comments.length);
+        // l(JSON.stringify(post.replies));
+        comments.sort((a,b) => (b.edited ? b.edited : b.created_utc) - (a.edited ? a.edited : a.created_utc));
+        //comments.forEach(comment => l(comment.replies.length + " replies to " + comment.author.name + " " + comment.body));
+        //l("collecting replies from " + JSON.stringify(comments.slice(0,2)));
+        var commentsAndReplies = collectReplies(comments).flat();
+        //l("collected replies " + JSON.stringify(commentsAndReplies.flat()));
+        l("total collected replies: " + commentsAndReplies.length);
+        commentsAndReplies.sort((a,b) => (b.edited ? b.edited : b.created_utc) - (a.edited ? a.edited : a.created_utc));
+        commentsAndReplies.slice(0,4).forEach(item => l("edited " + item.edited + " created " + item.created_utc + " deleted " + item.deleted));
+        var commentList = commentsAndReplies.slice(0,30).map(comment =>
+            "<li>" +
+            "<div class=\"tooltip\">" +
+            "<div class=\"tooltiptext\">" + encodeString(comment.author.name + ": " + comment.body) + "</div>" +
+            "<span" +
+                " style=\"" + getStyling()[timeOf(comment) > lastCommentUpdateTime ? "newComments" : "oldComments"] + "\"" +
+                ">" +
+            displayTime(timeOf(comment)) + (comment.edited ? "*" : " ") +
+            "<a href=\"" + comment.permalink + "\">" +
+                  "<span " + ((comment.author.name == myUsername) ? getStyle("myContent") : (comment.replyTo == myUsername) ? getStyle("replyToMe") : "") + ">" +
+                  encodeString(stub(comment.author.name + " to " + comment.replyTo + ": " + comment.body, 60)) +
+                  "</span>" +
+            "</a>" +
+            " (<a href=\"" + comment.permalink.split("/").slice(0, 6).join("/") + "\">" + stub(comment.permalink.split("/")[5],30) + "</a>)" +
+            "</span>" +
+            "</div>" +
+            "</li>\n");
+        var commentHtml = getStyling().tooltips +
+                          "<ul style=\"" + getStyling().lists + "\">" +
+                          commentList.join(" ") +
+                          "</ul>" +
+                          "<br>";
+        //l("comment html " + commentHtml);
+        const div = document.createElement("div");
+        div.id = "myScriptLatestComments";
+        div.innerHTML = commentHtml;
+        var xpathResult = document.evaluate("//div[@id='myScriptLatestComments']", document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+        var element = xpathResult.iterateNext();
+        // console.log("element is " + element.innerHTML);
+        console.log("search for existing comment list yields: " + element);
+        if (element !== null) {
+            console.log("found last insertion point " + element.parentNode);
+            element.parentNode.removeChild(element);
+        }
+        insertionPoint.insertBefore(div, insertionPoint.children[1]);
+        lastCommentUpdateTime = timeOf(commentsAndReplies[0]);
+        l("last comment update time " + lastCommentUpdateTime);
+    }
+
+    function collectReplies(commentsOrReplies) {
+        commentsOrReplies.forEach(item => item.replies.forEach(reply => {reply.replyTo = item.author.name;}));
+        return commentsOrReplies.map(item => (new Array(item)).concat(collectReplies(item.replies)).flat());
+    }
+
+    function stub(string, limit) {
+        if (string.length > limit) {
+            var offset = string.substr(0, limit).lastIndexOf(" ");
+            if (offset < 0) {
+                offset = limit;
+            }
+            return string.substr(0, offset) + "...";
+        } else {
+            return string;
+        }
+    }
+
+    function buildPostDiv(html) {
+        var updateLocation = null;
+        var xpathResult = document.evaluate("//div[@id='myScriptLatestPosts']", document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+        var element = xpathResult.iterateNext();
+        // console.log("element is " + element.innerHTML);
+        console.log("search for existing post list yields: " + element);
+        var insertionPoint = null;
+        if (element !== null) {
+            console.log("found last insertion point " + element.parentNode);
+            insertionPoint = element.parentNode;
+            insertionPoint.removeChild(element);
+        } else {
+            xpathResult = document.evaluate("//main", document, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+            console.log(xpathResult);
+            element = xpathResult.iterateNext();
+            // console.log("element is " + element.innerHTML);
+            var children = element.children;
+            l("children count: " + children.length);
+            insertionPoint = children[3];
+        }
+        if (insertionPoint !== null) {
+            const div = document.createElement("div");
+            div.id = "myScriptLatestPosts";
+            div.innerHTML = html;
+            insertionPoint.insertBefore(div, insertionPoint.children[0]);
+        }
+        return insertionPoint;
+     }
+
+    const timezoneOffset = (new Date()).getTimezoneOffset()*60;
+    function displayTime(time) {
+        try {
+        if (time !== undefined) {
+        var localTime = time - timezoneOffset;
+        return new Date(localTime*1000).toISOString().substr(11,8);
+        } else {
+            return "";
+        }
+        } catch(e) {
+            l("invalid date/time value " + time);
+        }
+    }
+
+})();
