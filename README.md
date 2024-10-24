@@ -30,4 +30,6 @@ I will post some screenshots of the script in use when I figure out how to do it
 The script has to find a place to put the "Update" button and a place to display the posts, comments and replies.  Those
 locations are determined through an XPath that may not work on the subreddit you're trying to monitor, so you may have
 to work on that code.  Try the subreddit AMD_Stock to see whether the script is working on first install before 
-attempting to adapt it for your subreddit of interest.
+attempting to adapt it for your subreddit of interest.  The colour schemes used by various subreddits are also a 
+potential problem.  I have implemented a styling technique that can address this; add a new stylings entry (copy from
+the default entry, then modify), then add a line to the mappings list for your subreddit to use your modified stylings.
