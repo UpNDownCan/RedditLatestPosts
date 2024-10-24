@@ -25,7 +25,16 @@ in TamperMonkey/GreaseMonkey once the script has been installed, of course.
 The script has old, unused and commented-out debugging log statements embedded in it.  Don't be offended, sometimes
 when debugging these scripts I reanimate some of these.
 
-I will post some screenshots of the script in use when I figure out how to do it :).
+The demo screenshot shows the "Update" button inserted ingloriously on the left side navigation panel.  It has been 
+pressed multiple times, the last time pressed it detected two new comments, color-coded to be different in the comment
+panel.  There are no new posts for the latest "Update" press.  The posts are listed in ascending chronological order,
+and the comments in descending chronological order.  Thus, the spot where the posts list meets the comments list is
+where the most recent activity has taken place.  Although not shown in the graphic, the mouse is hovering over a comment,
+the raw text of that comment is shown in a tooltip.  A click on the comment itself will open a tab to the comment; 
+the associated post in the subreddit can be clicked instead to open a tab to the whole post.  Moving the mouse up
+slightly to the next comment allows us to browse all comment/reply activity on the subreddit quickly.  Well, not
+necessarily all, all from the "top" posts.  A comment/reply not from the top posts may not be retrieved when making
+the comment list.  But normally it will pick up everything you're interested in.
 
 The script has to find a place to put the "Update" button and a place to display the posts, comments and replies.  Those
 locations are determined through an XPath that may not work on the subreddit you're trying to monitor, so you may have
